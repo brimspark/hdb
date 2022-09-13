@@ -1,53 +1,49 @@
+import streamlit as st
 import pandas as pd
 import glob
-import argparse
 
 from sklearn import linear_model
 import statsmodels.api as sm
-
 import matplotlib.pyplot as plt
 import seaborn as sns
-
 plt.style.use('dark_background')
 plt.rcParams["figure.dpi"] = 80
 plt.rcParams['font.size'] = 12
 plt.rcParams['font.sans-serif'] = ['Montserrat']
 
 
-# =============================================================================
-# HDB Analysis
-# JP 2021
-# =============================================================================
-
-
-argParser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-argParser.add_argument('project', help="DAWSON RD 2016")
-argParser.add_argument('storey', help="Storey of unit")
-argParser.add_argument('size', help="Size of unit in square feet")
-argParser.add_argument('price', help="Asking price of the unit")
-args = argParser.parse_args()
-
-PROJECT = args.project
-storey = args.storey
-size = args.size
-price = args.price
+# https://daniellewisdl-streamlit-cheat-sheet-app-ytm9sg.streamlitapp.com/
 
 
 
-def load_project(PROJECT):
-    df = pd.concat([pd.read_csv(file) for file in glob.glob("./data/*.csv")])
-    df['time'] = pd.to_datetime( df['time'] )
 
-    pdf = df[ df['full_name']==PROJECT ].dropna().sort_values('time', ascending=False)
+st.set_page_config(page_icon="📈", page_title="HDB Fair Value Calculator")
+
+
+st.header("""**HDB Fair Value Calculator**\nDesc""")
+
+
+file_list = glob.glob("./data/*.csv")
+
+df = pd.concat([pd.read_csv(file) for file in file_list])
+df['time'] = pd.to_datetime( df['time'] )
+
+PROJECT_LIST = sorted(df['full_name'].unique())
+
+
+form = st.form(key="submit-form")
+project = form.selectbox('project', PROJECT_LIST)
+storey = form.number_input("storey", min_value=1, max_value=600, value=10, step=1)
+size = form.number_input("size", min_value=1, max_value=10000, value=1000, step=10)
+price = form.number_input("Asking price", min_value=1, max_value=10_000_000, value=500000, step=1000)
+generate = form.form_submit_button("Generate")
+
+
+
+def load_project(df, project):
+    pdf = df[ df['full_name']==project ].dropna().sort_values('time', ascending=False)
     pdf['size_sqft'] = pdf['size_sqft'].astype(int)
     return pdf
-
-pdf = load_project(PROJECT)
-
-
-# =============================================================================
-# Plot overview of cost PSF by blocks
-# =============================================================================
 
 def plot_project_block_avg(pdf):
     vdf = pdf.groupby(['block','size_sqft'])['cost_psf'].mean().unstack().round(2)
@@ -59,11 +55,6 @@ def plot_project_block_avg(pdf):
     plt.show()
 
 
-plot_project_block_avg(pdf)
-
-# =============================================================================
-# Use MLR to get a fair price for given features
-# =============================================================================
 
 def MLR_predict(df, group_name, storey_mid, size_sqft, asking_price, print_stats=False):
     feature_cols = ['lease_years', 'days_ago', 'storey_mid', 'size_sqft']
@@ -110,17 +101,46 @@ def MLR_predict(df, group_name, storey_mid, size_sqft, asking_price, print_stats
     for feature in feature_cols:
         ax = plt.subplot(1,4,i)
         sns.regplot( x=df[feature], y=df['cost_psf'], scatter_kws={'s':12})
-        plt.scatter( inputs[feature], cost_psf, s=100, c='gold', marker='^', zorder=9 )
-        plt.scatter( inputs[feature], asking_psf, s=100, c='r', marker='^', zorder=9 )
+        plt.scatter( inputs[feature], cost_psf, s=100, c='gold', marker='^', zorder=9, label='Fair' )
+        plt.scatter( inputs[feature], asking_psf, s=100, c='r', marker='^', zorder=9, label='Asking' )
         plt.grid(linestyle=':', color='grey')
         plt.ylabel('Cost PSF')
         plt.xlabel(xlabel_dict[feature])
         if feature=='lease_years':
             ax.invert_xaxis()
         i += 1
+    plt.suptitle(project)
+    plt.savefig("output_image.png", dpi=140)
     plt.show()
 
-    return df
+    return cost_psf
 
 
-sdf = MLR_predict(pdf, PROJECT, storey, size, price)
+if generate:
+    pdf = load_project(df, project)
+    plot_project_block_avg(pdf)
+
+    pred_cost_psf = MLR_predict(pdf, project, storey, size, price)
+
+    pred_total_cost = pred_cost_psf*size
+    asking_psf = price / size
+
+    output_text = ""
+    output_text += f"Project: {project}"
+    output_text += f"\nStorey: {storey}"
+    output_text += f"\nSize: {size} sqft"
+    output_text += f"\nAsking price: ${price:,.0f}"
+    output_text += "\n"
+    output_text += f"\nPredicted fair cost PSF: ${pred_cost_psf:.2f}"
+    output_text += f"\nPredicted fair price: ${pred_total_cost:,.0f}"
+    output_text += f"\nPremium: ${price-pred_total_cost:,.0f} ({price/pred_total_cost-1:.2%})"
+
+    st.text(output_text)
+
+
+    st.image('output_image.png', output_format='png')
+
+
+
+
+
