@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import glob
-
 from sklearn import linear_model
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
@@ -13,8 +12,6 @@ plt.rcParams['font.sans-serif'] = ['Montserrat']
 
 
 # https://daniellewisdl-streamlit-cheat-sheet-app-ytm9sg.streamlitapp.com/
-
-
 
 
 st.set_page_config(page_icon="📈", page_title="HDB Fair Value Calculator")
@@ -97,20 +94,24 @@ def MLR_predict(df, group_name, storey_mid, size_sqft, asking_price, print_stats
                    'storey_mid': 'Storey',
                    'size_sqft': 'Size (sqft)'}
     i = 1
-    fig, ax = plt.subplots(1,4, figsize=(14,4), tight_layout=True)
+    fig, ax = plt.subplots(1,4, figsize=(18,5), tight_layout=True)
     for feature in feature_cols:
         ax = plt.subplot(1,4,i)
-        sns.regplot( x=df[feature], y=df['cost_psf'], scatter_kws={'s':12})
-        plt.scatter( inputs[feature], cost_psf, s=100, c='gold', marker='^', zorder=9, label='Fair' )
+        sns.regplot( x=df[feature], y=df['cost_psf'], scatter_kws={'s':12}, color='wheat')
+        plt.scatter( inputs[feature], cost_psf, s=100, c='dodgerblue', marker='^', zorder=9, label='Fair' )
         plt.scatter( inputs[feature], asking_psf, s=100, c='r', marker='^', zorder=9, label='Asking' )
         plt.grid(linestyle=':', color='grey')
+        xmin, xmax = df[feature].min(), df[feature].max()
+        xrange = xmax-xmin
+        adj = xrange*0.05
+        plt.xlim([xmin-adj, xmax+adj])
         plt.ylabel('Cost PSF')
         plt.xlabel(xlabel_dict[feature])
         if feature=='lease_years':
             ax.invert_xaxis()
         i += 1
-    plt.suptitle(project)
-    plt.savefig("output_image.png", dpi=140)
+    plt.suptitle(project, fontsize=20)
+    plt.savefig("output_image.png", dpi=140, bbox_inches='tight', pad_inches=0.3)
     plt.show()
 
     return cost_psf
